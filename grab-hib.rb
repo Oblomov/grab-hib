@@ -80,6 +80,47 @@ end
 puts '#!/bin/sh'
 puts 'CURDIR="$(pwd)"'
 
+puts <<TORFUNC
+
+add_torrents() {
+	dir="$1"
+	transmission-remote -w "$dir"
+	shift
+	for tor in "$@" ; do
+		out="$dir/$(basename "$tor" .torrent)"
+		if [ -e "$out" ] ; then
+			echo "$out exists, skipping"
+		else
+			echo "getting '$out' from '$tor'"
+			transmission-remote -a $tor
+		fi
+	done
+}
+
+TORFUNC
+
+puts <<GET
+
+add_wget() {
+	md5="$1"
+	link="$2"
+	fname="$3"
+	if [ -e "$fname" ] ; then
+		if ( echo "$md5 $fname" | md5sum --status -c - ) ; then
+			echo "$fname exists and is OK, skipping"
+		else
+			echo "$fname exists, MD5 fail, regetting"
+			rm "$fname"
+			wget -O "$fname" "$link"
+		fi
+	else
+		echo "getting $fname from $link"
+		wget -O "$fname" "$link"
+	fi
+}
+
+GET
+
 puts "echo 'Making directories'"
 dirs.chunk do |el|
 	el.split('/').first
@@ -96,20 +137,18 @@ torrents.keys.each do |dir|
 		puts "echo '    #{base}'"
 	end
 	fulldir = File.absolute_path(dir)
-	puts "transmission-remote -w '#{fulldir}' &&"
-	torrents[dir].each do |tor|
-		puts "transmission-remote -a '#{tor}' &&"
-	end
+	puts "add_torrents '#{fulldir}' \\"
+	puts torrents[dir].map { |tor|
+		"\t'#{tor}'"
+	}.join(" \\\n")
 end
 
-puts "\necho 'Manual downloads'"
+puts "\nexit\necho 'Manual downloads'"
 wgets.keys.each do |dir|
-	puts "{\ncd #{dir} && touch md5 &&"
+	puts "{\ncd #{dir} &&"
 	wgets[dir].each do |f|
-		puts "echo '#{f[:md5]} #{f[:fname]}' >> md5 &&"
-		puts "wget -c '#{f[:link]}' -O '#{f[:fname]}' &&"
+		puts "add_wget '#{f[:md5]}' '#{f[:link]}' '#{f[:fname]}' &&"
 	end
-	puts "md5sum -c md5 &&"
 	puts "cd \"$CURDIR\"\n} &&"
 end
 
