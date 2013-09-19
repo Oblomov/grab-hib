@@ -12,6 +12,31 @@
 
 require 'nokogiri'
 require 'set'
+require 'pathname'
+
+Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
+
+# maps file names to an array of Game structures
+$files = Hash.new do |h, k| h[k] = Set.new end
+
+$dirs = Set.new
+$torrents = Hash.new do |h, k| h[k] = Array.new end
+$wgets = Hash.new do |h, k| h[k] = Array.new end
+$links = Hash.new do |h, k| h[k] = Array.new end
+
+def mark_download game
+	if game.btlink
+		$torrents[game.path] << game
+	else
+		$wgets[game.path] << game
+	end
+end
+
+def mark_link game, ref
+	$links[ref] << game
+end
+
+
 
 list = ARGV.first
 
@@ -21,11 +46,6 @@ end
 
 doc = Nokogiri::HTML(open(ARGV.first))
 
-dirs = Set.new
-torrents = Hash.new do |h, k| h[k] = Array.new end
-wgets = Hash.new do |h, k| h[k] = Array.new end
-
-
 # the HIB page keeps each entry in a div with class 'row'
 # plus a name based on the game name. We take that class
 # as the root of our downloads, up to (and excluding)
@@ -34,6 +54,8 @@ wgets = Hash.new do |h, k| h[k] = Array.new end
 doc.css('div.row').each do |div|
 	name = div['class'].sub(/\s*row\s*/,'')
 	case name
+	when /_bundle$/
+		root = name.sub(/_bundle$/,'').gsub('_','-')
 	when /_prototype$/
 		root = name.sub(/_prototype$/,'').gsub('_','-')
 	when /^anomaly/
@@ -48,30 +70,25 @@ doc.css('div.row').each do |div|
 			aa = dl.css('a.a').first
 			link = aa['href']
 			btlink = aa['data-bt']
-			bt = btlink && !btlink.empty?
-			md5 = dl.css('a.dlmd5').first['href'].sub(/^#/,'') rescue "(unknown)"
-			ts = dl.css('a.dldate').first['data-timestamp'] rescue "(unknown)"
-			dl = true
-			# puts "%s: %s MD5 %s, timestamp %s" % [type, link, md5, ts]
-			if bt
-				# puts "\tBT %s" % [btlink]
+			if btlink.empty?
+				btlink = nil
 			end
-
+			md5 = dl.css('a.dlmd5').first['href'].sub(/^#/,'') rescue nil
+			ts = dl.css('a.dldate').first['data-timestamp'] rescue nil
 			savepath = File.join(root, type)
+
+			dl = true
 
 			if link[-1] == '/'
 				STDERR.puts "# No automatic downloads for #{savepath}, go to #{link}"
 				dl = false
 			end
 
-			dirs << savepath
+			$dirs << savepath
 			if dl
-				if bt
-					torrents[savepath] << btlink
-				else
-					fname = File.basename(link).sub(/\?key=.*/,'')
-					wgets[savepath] << {:fname => fname, :md5 => md5, :link => link}
-				end
+				fname = File.basename(link).sub(/\?key=.*/,'')
+				fkey = fname.intern
+				$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
 			end
 		end
 	end
@@ -122,15 +139,30 @@ add_wget() {
 GET
 
 puts "echo 'Making directories'"
-dirs.chunk do |el|
+$dirs.chunk do |el|
 	el.split('/').first
 end.each do |el, ar|
 	puts "mkdir -p '" + ar.join("' '") + "' &&"
 end
 
+$files.each do |fkey, games|
+	if games.length > 1
+		md5s = games.map { |g| g.md5 }.uniq
+		if md5s.length > 1 and not md5s.include? nil
+			games.each { |g| mark_download g}
+			next # done
+		end
+	end
+	# We get here if there is only one game and/or the other ones can be symlinked
+	ga = games.to_a
+	ref = ga.shift
+	mark_download ref
+	ga.each { |g| mark_link g, ref }
+end
+
 lastbase = ''
 puts "\necho 'Setting up torrents'"
-torrents.keys.each do |dir|
+$torrents.keys.each do |dir|
 	base = dir.split('/').first
 	if base != lastbase
 		lastbase = base
@@ -138,18 +170,28 @@ torrents.keys.each do |dir|
 	end
 	fulldir = File.absolute_path(dir)
 	puts "add_torrents '#{fulldir}' \\"
-	puts torrents[dir].map { |tor|
-		"\t'#{tor}'"
+	puts $torrents[dir].map { |game|
+		"\t'#{game.btlink}'"
 	}.join(" \\\n")
 end
 
-puts "\nexit\necho 'Manual downloads'"
-wgets.keys.each do |dir|
+puts "\necho 'Manual downloads'"
+$wgets.keys.each do |dir|
 	puts "{\ncd #{dir} &&"
-	wgets[dir].each do |f|
-		puts "add_wget '#{f[:md5]}' '#{f[:link]}' '#{f[:fname]}' &&"
+	$wgets[dir].each do |g|
+		puts "add_wget '#{g.md5}' '#{g.weblink}' '#{g.file}' &&"
 	end
 	puts "cd \"$CURDIR\"\n} &&"
+end
+
+puts "\necho 'Symlinking copies'"
+$links.each do |ref, list|
+	dst = Pathname(File.join(ref.path, ref.file))
+	list.each do |g|
+		src = Pathname(File.join(g.path, g.file))
+		puts "# #{src} #{dst}"
+		puts "ln -s #{dst.relative_path_from(src.dirname)} #{src}"
+	end
 end
 
 puts "true"
