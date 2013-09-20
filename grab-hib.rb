@@ -16,6 +16,16 @@ require 'pathname'
 
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
+class Game
+	def <=>(other)
+		self.members.each do |m|
+			ret = self[m] <=> other[m]
+			return ret if ret != 0
+		end
+		return 0
+	end
+end
+
 # maps file names to an array of Game structures
 $files = Hash.new do |h, k| h[k] = Set.new end
 
@@ -107,10 +117,12 @@ add_torrents() {
 		out="$dir/$(basename "$tor" .torrent)"
 		if [ -e "$out" ] ; then
 			echo "$out exists, skipping"
+		elif [ -e "$out.part" ] ; then
+			echo "$out.part exists, skipping $out"
 		else
 			echo "getting '$out' from '$tor'"
 			transmission-remote -a $tor
-		fi
+		fi fi
 	done
 }
 
@@ -154,7 +166,7 @@ $files.each do |fkey, games|
 		end
 	end
 	# We get here if there is only one game and/or the other ones can be symlinked
-	ga = games.to_a
+	ga = games.to_a.sort
 	ref = ga.shift
 	mark_download ref
 	ga.each { |g| mark_link g, ref }
