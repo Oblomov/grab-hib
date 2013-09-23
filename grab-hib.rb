@@ -122,7 +122,7 @@ add_torrents() {
 		else
 			echo "getting '$out' from '$tor'"
 			transmission-remote -a $tor
-		fi fi
+		fi
 	done
 }
 
