@@ -202,7 +202,7 @@ $links.each do |ref, list|
 	list.each do |g|
 		src = Pathname(File.join(g.path, g.file))
 		puts "# #{src} #{dst}"
-		puts "ln -s #{dst.relative_path_from(src.dirname)} #{src}"
+		puts "test -e #{src} || ln -s #{dst.relative_path_from(src.dirname)} #{src}"
 	end
 end
 
