@@ -63,17 +63,20 @@ doc = Nokogiri::HTML(open(ARGV.first))
 # The only exception is the white birch
 doc.css('div.row').each do |div|
 	name = div['class'].sub(/\s*row\s*/,'')
-	case name
-	when /_bundle$/
-		root = name.sub(/_bundle$/,'').gsub('_','-')
-	when /_prototype$/
-		root = name.sub(/_prototype$/,'').gsub('_','-')
-	when /^anomaly/
-		root = File.join('anomaly', name[/[^_]*/].sub(/^anomaly/,''))
-	else
-		root = name[/[^_]*/]
+	root = name.dup
+	if root.match /^anomaly/
+		root = File.join('anomaly', root[/[^_]*/].sub(/^anomaly/,''))
 	end
-	# puts name, root
+	case root
+	when /_makingof/
+		root = root.sub(/_makingof.*/,'').gsub('_','-')
+	when /_bundle$/
+		root = root.sub(/_bundle$/,'').gsub('_','-')
+	when /_prototype$/
+		root = root.sub(/_prototype$/,'').gsub('_','-')
+	else
+		root = root[/[^_]*/]
+	end
 	div.css('.downloads').each do |dd|
 		type = dd['class'].gsub(/\s*(downloads|show)\s*/,'')
 		dd.css('.download').each do |dl|
