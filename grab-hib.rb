@@ -114,7 +114,8 @@ add_torrents() {
 	transmission-remote -w "$dir"
 	shift
 	for tor in "$@" ; do
-		out="$dir/$(basename "$tor" .torrent)"
+		out="$dir/$(basename "$tor")"
+		out="${out%.torrent*}"
 		if [ -e "$out" ] ; then
 			echo "$out exists, skipping"
 		elif [ -e "$out.part" ] ; then
