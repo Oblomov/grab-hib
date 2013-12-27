@@ -117,8 +117,8 @@ add_torrents() {
 	transmission-remote -w "$dir"
 	shift
 	for tor in "$@" ; do
-		out="$dir/$(basename "$tor")"
-		out="${out%.torrent*}"
+		eval "$tor"
+		out="$dir/$out"
 		if [ -e "$out" ] ; then
 			echo "$out exists, skipping"
 		elif [ -e "$out.part" ] ; then
@@ -187,7 +187,7 @@ $torrents.keys.each do |dir|
 	fulldir = File.absolute_path(dir)
 	puts "add_torrents '#{fulldir}' \\"
 	puts $torrents[dir].map { |game|
-		"\t'#{game.btlink}'"
+		"\t\"tor='#{game.btlink}' out='#{game.file}'\""
 	}.join(" \\\n")
 end
 
