@@ -170,7 +170,7 @@ $files.each do |fkey, games|
 		end
 	end
 	# We get here if there is only one game and/or the other ones can be symlinked
-	ga = games.to_a.sort
+	ga = games.to_a.sort { |a, b| b.path <=> a.path }
 	ref = ga.shift
 	mark_download ref
 	ga.each { |g| mark_link g, ref }
