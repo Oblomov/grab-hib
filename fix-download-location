@@ -2,8 +2,10 @@
 
 . ./hib-utils.sh
 
+exec 4<&0
+
 prompt () {
-	echo read -p "$1" junk <&4
+	read -p "$1" junk <&4 || exit 1
 }
 
 process_group () {
@@ -14,7 +16,7 @@ process_group () {
 		eval $tor
 		found=$(transmission-remote -l | grep "$out")
 		if [ -z "$found" ] ; then
-			echo "$out not being downloaded yet. Adding ..."
+			echo "$out not being downloaded yet. Adding $tor ..."
 			transmission-remote -w "$path"
 			transmission-remote -a $tor
 			echo "\tdone."
