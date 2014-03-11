@@ -17,16 +17,14 @@ require 'net/https'
 require 'net/http'
 require 'uri'
 require 'optparse'
+require 'yaml'
 
 options = {}
 
 optparse = OptionParser.new do |opts|
 	opts.banner = "Usage: grab-hib.rb [options]"
-	opts.on("-u", "--username USERNAME", "username") do |username|
-		options[:username] = username
-	end
-	opts.on("-p", "--password PASSWORD", "password") do |password|
-		options[:password] = password
+	opts.on("-d", "--download FILENAME", "download") do |download|
+		options[:download] = download
 	end
 	opts.on("-h", "--help", "Display this screen") do
 		puts opts
@@ -34,20 +32,8 @@ optparse = OptionParser.new do |opts|
 	end
 end
 
-begin
-	optparse.parse!
-	mandatory = [:username, :password]
-	missing = mandatory.select{ |param| options[param].nil? }
-	if not missing.empty?
-		puts "Missing options: #{missing.join(', ')}"
-		puts optparse
-		exit
-	end
-rescue OptionParser::InvalidOption, OptionParser::MissingArgument
-	puts $!.to_s
-	puts optparse
-	exit
-end
+optparse.parse!
+
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
 class Game
@@ -97,7 +83,19 @@ def download_home username, password
 	return res.body
 end
 
-doc = Nokogiri::HTML(download_home(options[:username],options[:password]))
+if not options[:download]
+	list = ARGV.first
+	if not list or list.empty?
+		puts "Please specify a file"
+		exit 
+	end
+	doc = Nokogiri::HTML(open(ARGV.first))
+else
+	settings = YAML::load_file "settings.yml"
+	File.new(options[:download], "w").puts(download_home(settings['username'],settings['password']))
+	doc = Nokogiri::HTML(open(options[:download]))
+end
+	
 
 # the HIB page keeps each entry in a div with class 'row'
 # plus a name based on the game name. We take that class
