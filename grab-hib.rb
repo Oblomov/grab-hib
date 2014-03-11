@@ -13,6 +13,26 @@
 require 'nokogiri'
 require 'set'
 require 'pathname'
+require 'net/https'
+require 'net/http'
+require 'uri'
+require 'optparse'
+require 'yaml'
+
+options = {}
+
+optparse = OptionParser.new do |opts|
+	opts.banner = "Usage: grab-hib.rb [options]"
+	opts.on("-d", "--download FILENAME", "download") do |download|
+		options[:download] = download
+	end
+	opts.on("-h", "--help", "Display this screen") do
+		puts opts
+		exit
+	end
+end
+
+optparse.parse!
 
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
@@ -46,15 +66,36 @@ def mark_link game, ref
 	$links[ref] << game
 end
 
-
-
-list = ARGV.first
-
-if not list or list.empty?
-	puts "Please specify a file"
+def download_home username, password
+	url = URI.parse('https://www.humblebundle.com/login')
+	http = Net::HTTP.new(url.host, url.port)
+	http.use_ssl = true
+	resp, data = http.get(url.path)
+	cookie = resp.response['set-cookie'].split('; ')[0]
+	data = "goto=/home&username="+username+"&password="+password+"&authy-token&submit-data="
+	headers = {
+		'Cookie' => cookie,
+		'Referer' => url.to_s,
+		'Content-Type' => 'application/x-www-form-urlencoded'
+	}
+	resp, data = http.post(url.path, data, headers)
+	res = http.get(resp.response['Location'], {'Cookie:' => resp.response['set-cookie']})
+	return res.body
 end
 
-doc = Nokogiri::HTML(open(ARGV.first))
+if not options[:download]
+	list = ARGV.first
+	if not list or list.empty?
+		puts "Please specify a file"
+		exit 
+	end
+	doc = Nokogiri::HTML(open(ARGV.first))
+else
+	settings = YAML::load_file "settings.yml"
+	File.new(options[:download], "w").puts(download_home(settings['username'],settings['password']))
+	doc = Nokogiri::HTML(open(options[:download]))
+end
+	
 
 # the HIB page keeps each entry in a div with class 'row'
 # plus a name based on the game name. We take that class
