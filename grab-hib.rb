@@ -20,21 +20,6 @@ require 'optparse'
 require 'yaml'
 require 'json'
 
-options = {}
-
-optparse = OptionParser.new do |opts|
-	opts.banner = "Usage: grab-hib.rb [options]"
-	opts.on("-d", "--download FILENAME", "download") do |download|
-		options[:download] = download
-	end
-	opts.on("-h", "--help", "Display this screen") do
-		puts opts
-		exit
-	end
-end
-
-optparse.parse!
-
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
 class Game
@@ -144,6 +129,24 @@ def download_home username, password
 	res = http.get(resp.response['Location'], {'Cookie:' => resp.response['set-cookie']})
 	return res.body
 end
+
+## Main action from here on
+
+options = {}
+
+optparse = OptionParser.new do |opts|
+	opts.banner = "Usage: grab-hib.rb [options]"
+	opts.on("-d", "--download FILENAME", "download") do |download|
+		options[:download] = download
+	end
+	opts.on("-h", "--help", "Display this screen") do
+		puts opts
+		exit
+	end
+end
+
+optparse.parse!
+
 
 
 if not options[:download]
