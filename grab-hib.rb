@@ -67,6 +67,8 @@ def get_root name
 		root = root.sub(/_bundle$/,'').gsub('_','-')
 	when /_prototype$/
 		root = root.sub(/_prototype$/,'').gsub('_','-')
+	when /withsoundtrack$/
+		root = root.sub(/withsoundtrack$/,'').gsub('_','-')
 	else
 		root = root[/[^_]*/]
 	end
