@@ -87,7 +87,7 @@ if not options[:download]
 	list = ARGV.first
 	if not list or list.empty?
 		puts "Please specify a file"
-		exit 
+		exit
 	end
 	doc = Nokogiri::HTML(open(ARGV.first))
 else
@@ -95,7 +95,6 @@ else
 	File.new(options[:download], "w").puts(download_home(settings['username'],settings['password']))
 	doc = Nokogiri::HTML(open(options[:download]))
 end
-	
 
 # the HIB page keeps each entry in a div with class 'row'
 # plus a name based on the game name. We take that class
