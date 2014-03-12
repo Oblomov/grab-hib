@@ -137,6 +137,7 @@ def get_cookies
 end
 
 def download_home username, password
+	STDERR.puts "Downloading HIB home ..."
 	url = URI.parse('https://www.humblebundle.com/login')
 	http = Net::HTTP.new(url.host, url.port)
 	http.use_ssl = true
@@ -154,13 +155,32 @@ def download_home username, password
 	return res.body
 end
 
+API_URL = 'https://www.humblebundle.com/api/v1/'
+def api_call path
+	url = URI.parse API_URL+path
+	http = Net::HTTP.new(url.host, url.port)
+	http.use_ssl = true
+	resp = http.get(url.path, {'Cookie:' => get_cookies})
+	return resp.body
+end
+
+def process_gamekeys gks, json
+	data = {}
+	gks.each do |key|
+		STDERR.puts "Getting data for order #{key}"
+		data[key] = JSON.parse(api_call "order/#{key}")
+	end
+	File.write json, JSON.dump(data)
+	return data
+end
+
 ## Main action from here on
 
 options = {}
 
 optparse = OptionParser.new do |opts|
 	opts.banner = "Usage: grab-hib.rb [options]"
-	opts.on("-d", "--download FILENAME", "download") do |download|
+	opts.on("-d", "--download FILENAME", "download library index into FILENAME.html, FILENAME.json") do |download|
 		options[:download] = download
 	end
 	opts.on("-h", "--help", "Display this screen") do
@@ -169,29 +189,32 @@ optparse = OptionParser.new do |opts|
 	end
 end
 
+settings = YAML.load_file SETTINGS
+File.open(COOKIES) { |f| $cookies.replace JSON.load f} if File.exists? COOKIES
+
 optparse.parse!
 
 if not options[:download]
-	list = ARGV.first
-	if not list or list.empty?
+	html = ARGV.first
+	if not html or html.empty?
 		puts "Please specify a file"
 		exit
 	end
-	contents = f.read
+	json = html.sub(/(.html?)?$/,'.json')
+	contents = File.read html
 else
-	list = options[:download]
-	settings = YAML.load_file SETTINGS
-	File.open(COOKIES) { |f| $cookies.replace JSON.load f} if File.exists? COOKIES
+	html = options[:download] + '.html'
+	json = options[:download] + '.json'
 	contents = download_home(settings['username'], settings['password'])
-	File.write(list, contents)
-	File.write(COOKIES, JSON.dump($cookies))
+	File.write list, contents
+	File.write COOKIES, JSON.dump($cookies)
 end
 
 gk = contents.match /gamekeys: (\[[^\]]+\])/
 if gk
 	gks = JSON.parse gk[1]
 	STDERR.puts "API-based index file, game keys #{gks.join(', ')}"
-	throw NotImplementedError, "API-based index files not supported (yet)"
+	process_gamekeys gks, json
 else
 	STDERR.puts "Pre-API index file"
 	process_oldstyle_html contents
