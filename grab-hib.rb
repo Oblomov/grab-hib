@@ -122,9 +122,7 @@ COOKIES = 'cookies.json'
 $cookies = {}
 
 def set_cookies resp
-	# HIB retuns a comma-separated list of cookies, but there are commas in the expire
-	# tag of the cookies, so we need to 'filter out' false matches
-	resp.response['set-cookie'].split(', ').grep(/=/) do |cookie|
+	resp.get_fields('set-cookie').each do |cookie|
 		set = cookie.split('; ', 2).first.split('=')
 		if set.length == 1
 			$cookies.delete(set.first)
