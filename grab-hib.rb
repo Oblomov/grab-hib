@@ -13,6 +13,7 @@
 require 'nokogiri'
 require 'set'
 require 'pathname'
+require 'json'
 
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
@@ -68,8 +69,8 @@ def get_root name
 end
 
 # Process an old-style (pre-API) HTML file
-def process_oldstyle_html fname
-	doc = Nokogiri::HTML(open(list))
+def process_oldstyle_html contents
+	doc = Nokogiri::HTML(contents)
 
 	# the HIB page keeps each entry in a div with class 'row'
 	# plus a name based on the game name.
@@ -115,7 +116,18 @@ if not list or list.empty?
 	puts "Please specify a file"
 end
 
-process_oldstyle_html list
+open(list) do |f|
+	fc = f.read
+	gk = fc.match /gamekeys: (\[[^\]]+\])/
+	if gk
+		gks = JSON.parse gk[1]
+		puts "API-based index file, game keys #{gks.join(', ')}"
+		throw NotImplementedError, "API-based index files not supported (yet)"
+	else
+		STDERR.puts "Pre-API index file"
+		process_oldstyle_html fc
+	end
+end
 
 
 puts '#!/bin/sh'
