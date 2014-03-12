@@ -46,23 +46,10 @@ def mark_link game, ref
 	$links[ref] << game
 end
 
-
-
-list = ARGV.first
-
-if not list or list.empty?
-	puts "Please specify a file"
-end
-
-doc = Nokogiri::HTML(open(ARGV.first))
-
-# the HIB page keeps each entry in a div with class 'row'
-# plus a name based on the game name. We take that class
-# as the root of our downloads, up to (and excluding)
-# the first underscore
-# The only exception is the white birch
-doc.css('div.row').each do |div|
-	name = div['class'].sub(/\s*row\s*/,'')
+# 'root' of a name, removing information such as
+# 'bundle', 'prototype', etc. Based off the used (class) name
+# up to (and excluding) the first underscore
+def get_root name
 	root = name.dup
 	if root.match /^anomaly/
 		root = File.join('anomaly', root[/[^_]*/].sub(/^anomaly/,''))
@@ -77,35 +64,59 @@ doc.css('div.row').each do |div|
 	else
 		root = root[/[^_]*/]
 	end
-	div.css('.downloads').each do |dd|
-		type = dd['class'].gsub(/\s*(downloads|show)\s*/,'')
-		dd.css('.download').each do |dl|
-			aa = dl.css('a.a').first
-			link = aa['href']
-			btlink = aa['data-bt']
-			if btlink.empty?
-				btlink = nil
-			end
-			md5 = dl.css('a.dlmd5').first['href'].sub(/^#/,'') rescue nil
-			ts = dl.css('a.dldate').first['data-timestamp'] rescue nil
-			savepath = File.join(root, type)
+	return root
+end
 
-			dl = true
+# Process an old-style (pre-API) HTML file
+def process_oldstyle_html fname
+	doc = Nokogiri::HTML(open(list))
 
-			if link[-1] == '/'
-				STDERR.puts "# No automatic downloads for #{savepath}, go to #{link}"
-				dl = false
-			end
+	# the HIB page keeps each entry in a div with class 'row'
+	# plus a name based on the game name.
+	doc.css('div.row').each do |div|
+		name = div['class'].sub(/\s*row\s*/,'')
+		root = get_root name
+		div.css('.downloads').each do |dd|
+			type = dd['class'].gsub(/\s*(downloads|show)\s*/,'')
+			dd.css('.download').each do |dl|
+				aa = dl.css('a.a').first
+				link = aa['href']
+				btlink = aa['data-bt']
+				if btlink.empty?
+					btlink = nil
+				end
+				md5 = dl.css('a.dlmd5').first['href'].sub(/^#/,'') rescue nil
+				ts = dl.css('a.dldate').first['data-timestamp'] rescue nil
+				savepath = File.join(root, type)
 
-			$dirs << savepath
-			if dl
-				fname = File.basename(link).sub(/\?key=.*/,'')
-				fkey = fname.intern
-				$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
+				dl = true
+
+				if link[-1] == '/'
+					STDERR.puts "# No automatic downloads for #{savepath}, go to #{link}"
+					dl = false
+				end
+
+				$dirs << savepath
+				if dl
+					fname = File.basename(link).sub(/\?key=.*/,'')
+					fkey = fname.intern
+					$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
+				end
 			end
 		end
 	end
 end
+
+
+
+list = ARGV.first
+
+if not list or list.empty?
+	puts "Please specify a file"
+end
+
+process_oldstyle_html list
+
 
 puts '#!/bin/sh'
 puts 'CURDIR="$(pwd)"'
