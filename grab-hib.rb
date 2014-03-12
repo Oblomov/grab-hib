@@ -13,7 +13,27 @@
 require 'nokogiri'
 require 'set'
 require 'pathname'
+require 'net/https'
+require 'net/http'
+require 'uri'
+require 'optparse'
+require 'yaml'
 require 'json'
+
+options = {}
+
+optparse = OptionParser.new do |opts|
+	opts.banner = "Usage: grab-hib.rb [options]"
+	opts.on("-d", "--download FILENAME", "download") do |download|
+		options[:download] = download
+	end
+	opts.on("-h", "--help", "Display this screen") do
+		puts opts
+		exit
+	end
+end
+
+optparse.parse!
 
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
@@ -108,12 +128,34 @@ def process_oldstyle_html contents
 	end
 end
 
+def download_home username, password
+	url = URI.parse('https://www.humblebundle.com/login')
+	http = Net::HTTP.new(url.host, url.port)
+	http.use_ssl = true
+	resp, data = http.get(url.path)
+	cookie = resp.response['set-cookie'].split('; ')[0]
+	data = "goto=/home&username="+username+"&password="+password+"&authy-token&submit-data="
+	headers = {
+		'Cookie' => cookie,
+		'Referer' => url.to_s,
+		'Content-Type' => 'application/x-www-form-urlencoded'
+	}
+	resp, data = http.post(url.path, data, headers)
+	res = http.get(resp.response['Location'], {'Cookie:' => resp.response['set-cookie']})
+	return res.body
+end
 
 
-list = ARGV.first
-
-if not list or list.empty?
-	puts "Please specify a file"
+if not options[:download]
+	list = ARGV.first
+	if not list or list.empty?
+		puts "Please specify a file"
+		exit
+	end
+else
+	settings = YAML::load_file "settings.yml"
+	File.new(options[:download], "w").puts(download_home(settings['username'],settings['password']))
+	list = options[:download]
 end
 
 open(list) do |f|
