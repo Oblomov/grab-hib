@@ -104,7 +104,7 @@ def process_oldstyle_html contents
 
 				$dirs << savepath
 				if dl
-					fname = File.basename(link).sub(/\?key=.*/,'')
+					fname = File.basename(link).sub(/\?(key|ttl)=.*/,'')
 					fkey = fname.intern
 					$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
 				end
@@ -164,6 +164,7 @@ def api_call path
 	return resp.body
 end
 
+# Download the JSON data for the given game keys
 def process_gamekeys gks, json
 	data = {}
 	gks.each do |key|
@@ -172,6 +173,41 @@ def process_gamekeys gks, json
 	end
 	File.write json, JSON.dump(data)
 	return data
+end
+
+# Parse the JSON data and build the Game list
+def process_json_data jd
+	jd.each do |gk, hash|
+		hash['subproducts'].each do |prod|
+			root = get_root prod['machine_name']
+			prod['downloads'].each do |dd|
+				type = dd['platform']
+				savepath = File.join(root, type)
+				$dirs << savepath
+				dd['download_struct'].each do |ds|
+					sha1 = ds['sha1']
+					md5 = ds['md5']
+					ts = ds['timestamp']
+					if ds['url']
+						link = ds['url']['web']
+						btlink = ds['url']['bittorrent']
+						btlink = nil if btlink and btlink.empty?
+						dl = true
+					elsif (link = ds['external_link'])
+						# TODO only announce once per external link
+						STDERR.puts "# No automatic downloads for #{savepath}, go to #{link}"
+						dl = false
+					end
+					if dl
+						fname = File.basename(link).sub(/\?(key|ttl)=.*/,'')
+						fkey = fname.intern
+						# TODO use sha1
+						$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
+					end
+				end
+			end
+		end
+	end
 end
 
 ## Main action from here on
@@ -206,7 +242,7 @@ else
 	html = options[:download] + '.html'
 	json = options[:download] + '.json'
 	contents = download_home(settings['username'], settings['password'])
-	File.write list, contents
+	File.write html, contents
 	File.write COOKIES, JSON.dump($cookies)
 end
 
@@ -214,11 +250,16 @@ gk = contents.match /gamekeys: (\[[^\]]+\])/
 if gk
 	gks = JSON.parse gk[1]
 	STDERR.puts "API-based index file, game keys #{gks.join(', ')}"
-	process_gamekeys gks, json
+	json_data = process_gamekeys gks, json
+elsif contents[0,1] == '{'
+	json_data = JSON.parse contents
 else
 	STDERR.puts "Pre-API index file"
 	process_oldstyle_html contents
+	json_data = nil
 end
+
+process_json_data json_data if json_data
 
 
 puts '#!/bin/sh'
@@ -226,7 +267,7 @@ puts 'CURDIR="$(pwd)"'
 puts '. ./hib-utils.sh'
 
 puts "echo 'Making directories'"
-$dirs.chunk do |el|
+$dirs.sort.chunk do |el|
 	el.split('/').first
 end.each do |el, ar|
 	puts "mkdir -p '" + ar.join("' '") + "' &&"
