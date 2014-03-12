@@ -113,20 +113,46 @@ def process_oldstyle_html contents
 	end
 end
 
+# File where settings are stored
+SETTINGS = 'settings.yml'
+
+# File where cookies are stored
+COOKIES = 'cookies.json'
+# cookies!
+$cookies = {}
+
+def set_cookies resp
+	# HIB retuns a comma-separated list of cookies, but there are commas in the expire
+	# tag of the cookies, so we need to 'filter out' false matches
+	resp.response['set-cookie'].split(', ').grep(/=/) do |cookie|
+		set = cookie.split('; ', 2).first.split('=')
+		if set.length == 1
+			$cookies.delete(set.first)
+		else
+			$cookies[set.first]=set.last
+		end
+	end
+end
+
+def get_cookies
+	return $cookies.map { |k,v| "#{k}=#{v}"}.join('; ')
+end
+
 def download_home username, password
 	url = URI.parse('https://www.humblebundle.com/login')
 	http = Net::HTTP.new(url.host, url.port)
 	http.use_ssl = true
 	resp, data = http.get(url.path)
-	cookie = resp.response['set-cookie'].split('; ')[0]
+	set_cookies resp
 	data = "goto=/home&username="+username+"&password="+password+"&authy-token&submit-data="
 	headers = {
-		'Cookie' => cookie,
+		'Cookie' => get_cookies,
 		'Referer' => url.to_s,
 		'Content-Type' => 'application/x-www-form-urlencoded'
 	}
 	resp, data = http.post(url.path, data, headers)
-	res = http.get(resp.response['Location'], {'Cookie:' => resp.response['set-cookie']})
+	set_cookies resp
+	res = http.get(resp.response['Location'], {'Cookie:' => get_cookies})
 	return res.body
 end
 
@@ -147,31 +173,30 @@ end
 
 optparse.parse!
 
-
-
 if not options[:download]
 	list = ARGV.first
 	if not list or list.empty?
 		puts "Please specify a file"
 		exit
 	end
+	contents = f.read
 else
-	settings = YAML::load_file "settings.yml"
-	File.new(options[:download], "w").puts(download_home(settings['username'],settings['password']))
 	list = options[:download]
+	settings = YAML.load_file SETTINGS
+	File.open(COOKIES) { |f| $cookies.replace JSON.load f} if File.exists? COOKIES
+	contents = download_home(settings['username'], settings['password'])
+	File.write(list, contents)
+	File.write(COOKIES, JSON.dump($cookies))
 end
 
-open(list) do |f|
-	fc = f.read
-	gk = fc.match /gamekeys: (\[[^\]]+\])/
-	if gk
-		gks = JSON.parse gk[1]
-		puts "API-based index file, game keys #{gks.join(', ')}"
-		throw NotImplementedError, "API-based index files not supported (yet)"
-	else
-		STDERR.puts "Pre-API index file"
-		process_oldstyle_html fc
-	end
+gk = contents.match /gamekeys: (\[[^\]]+\])/
+if gk
+	gks = JSON.parse gk[1]
+	STDERR.puts "API-based index file, game keys #{gks.join(', ')}"
+	throw NotImplementedError, "API-based index files not supported (yet)"
+else
+	STDERR.puts "Pre-API index file"
+	process_oldstyle_html contents
 end
 
 
