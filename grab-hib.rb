@@ -396,6 +396,7 @@ $links.each do |ref, list|
 	dst = Pathname(File.join(ref.path, ref.file))
 	list.each do |g|
 		src = Pathname(File.join(g.path, g.file))
+		next if src == dst
 		puts "# #{src} #{dst}"
 		puts "test -e #{src} || ln -s #{dst.relative_path_from(src.dirname)} #{src}"
 	end
