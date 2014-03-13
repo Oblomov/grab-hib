@@ -1,9 +1,8 @@
 #!/usr/bin/ruby
 
 =begin
-# This script scrapes the links from your Humble Indie Bundle account page
-# (which you have to download and save by yourself) and outputs a shell script
-# that
+# This script retrieves the links to the Humble Bundle products you have bought
+# and outputs a shell script that
 # (1) prepares a directory structure to store all the files
 # (2) sends the appropriate commands to transmission-remote to get the files
 #     that can be get via BT
@@ -35,11 +34,19 @@ end
 # maps file names to an array of Game structures
 $files = Hash.new do |h, k| h[k] = Set.new end
 
+# directories to be created
 $dirs = Set.new
+
+# torrents to be downloaded
 $torrents = Hash.new do |h, k| h[k] = Array.new end
+
+# files to be downloaded directly
 $wgets = Hash.new do |h, k| h[k] = Array.new end
+
+# symbolink links between files with multiple categorizations
 $links = Hash.new do |h, k| h[k] = Array.new end
 
+# Mark a game for download (torrent if possible, otherwise direct)
 def mark_download game
 	if game.btlink
 		$torrents[game.path] << game
@@ -48,6 +55,7 @@ def mark_download game
 	end
 end
 
+# Mark a game for symlink
 def mark_link game, ref
 	$links[ref] << game
 end
@@ -123,6 +131,7 @@ COOKIES = 'cookies.json'
 # cookies!
 $cookies = {}
 
+# Store cookies based on the set-cookie headers in a response
 def set_cookies resp
 	resp.get_fields('set-cookie').each do |cookie|
 		set = cookie.split('; ', 2).first.split('=')
@@ -134,10 +143,12 @@ def set_cookies resp
 	end
 end
 
+# Return the cookies in a header-compatible format
 def get_cookies
 	return $cookies.map { |k,v| "#{k}=#{v}"}.join('; ')
 end
 
+# Download the user home page on Humble Bundle
 def download_home username, password
 	STDERR.puts "Downloading HIB home ..."
 	url = URI.parse('https://www.humblebundle.com/login')
@@ -157,6 +168,7 @@ def download_home username, password
 	return res.body
 end
 
+# Issue an API call
 API_URL = 'https://www.humblebundle.com/api/v1/'
 def api_call path
 	url = URI.parse API_URL+path
@@ -227,6 +239,7 @@ optparse = OptionParser.new do |opts|
 	end
 end
 
+# Load settings and (potentially old)
 settings = YAML.load_file SETTINGS
 File.open(COOKIES) { |f| $cookies.replace JSON.load f} if File.exists? COOKIES
 
@@ -248,20 +261,49 @@ else
 	File.write COOKIES, JSON.dump($cookies)
 end
 
+# `contents` holds the file contents of either the file passed on the command line
+# or the library index page downloaded from the Internet. We need to determine if it's
+# an old (pre-API) index file, a new (API) index file, or the JSON file with the list of
+# all products already
+
 gk = contents.match /gamekeys: (\[[^\]]+\])/
 if gk
+	# API index files have a gamekeys list, use it to build a JSON of the
+	# product data (and store it on disk too, for future uses)
 	gks = JSON.parse gk[1]
 	STDERR.puts "API-based index file, game keys #{gks.join(', ')}"
 	json_data = process_gamekeys gks, json
 elsif contents[0,1] == '{'
+	STDERR.puts "JSON product data"
+	# If the contents start with a '{' we assume it's a (previously stored by us)
+	# JSON list of product data, so parse it
 	json_data = JSON.parse contents
 else
+	# In all other cases, assume an old (pre-API) index file
 	STDERR.puts "Pre-API index file"
-	process_oldstyle_html contents
 	json_data = nil
 end
 
-process_json_data json_data if json_data
+# Build the Game lists
+if json_data
+	# show the products we are dealing with, sorted by (natural) machine name
+	prodlist = json_data.map do |k, v|
+		v['product']
+	end.sort do |p1, p2|
+		pm1 = p1['machine_name'].scan(/^(\w+)(\d+)?$/).first
+		pm2 = p2['machine_name'].scan(/^(\w+)(\d+)?$/).first
+		pm1[1] = pm1[1].to_i
+		pm2[1] = pm2[1].to_i
+		pm1 <=> pm2
+	end.map do |p|
+		#"%s (%s)" % [p['human_name'], p['machine_name']]
+		p['human_name']
+	end
+	STDERR.puts "Products: #{prodlist.join(', ')}"
+	process_json_data json_data
+else
+	process_oldstyle_html contents
+end
 
 
 puts '#!/bin/sh'
