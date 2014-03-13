@@ -15,9 +15,11 @@ require 'pathname'
 require 'net/https'
 require 'net/http'
 require 'uri'
+require 'open-uri'
 require 'optparse'
 require 'yaml'
 require 'json'
+require './bdecode'
 
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
 
@@ -47,10 +49,38 @@ $wgets = Hash.new do |h, k| h[k] = Array.new end
 $links = Hash.new do |h, k| h[k] = Array.new end
 
 # Mark a game for download (torrent if possible, otherwise direct)
+# We check if there is a BitTorrent link _and_ if the link works
+# properly (returns a 200 OK HTTP response _and_ produces a valid
+# torrent)
 def mark_download game
-	if game.btlink
+	usebt = game.btlink ? true : false
+	if usebt
+		# check if it exists
+		begin
+			torrent = open(game.btlink).read
+			begin
+				decoded = torrent.bdecode.first
+				fname = decoded[:info][:name]
+				STDERR.puts "Torrent %s claims filename %s instead of %s" % [
+					game.btlink, fname, game.file
+				] if fname != game.file
+			rescue => e
+				STDERR.puts "Error '%s' while trying to decode %s for %s" % [
+					e.message, game.btlink, game.file
+				]
+				usebt = false
+			end
+		rescue OpenURI::HTTPError => e
+			STDERR.puts "%s trying to get %s for %s" % [
+				e.message, game.btlink, game.file
+			]
+			usebt = false
+		end
+	end
+	if usebt
 		$torrents[game.path] << game
 	else
+		STDERR.puts "using direct download for #{game.file}" if game.btlink
 		$wgets[game.path] << game
 	end
 end
