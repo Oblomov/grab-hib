@@ -41,6 +41,8 @@ $dirs = Set.new
 
 # torrents to be downloaded
 $torrents = Hash.new do |h, k| h[k] = Array.new end
+# should torrents be verified?
+$verify = false
 
 # files to be downloaded directly
 $wgets = Hash.new do |h, k| h[k] = Array.new end
@@ -54,7 +56,7 @@ $links = Hash.new do |h, k| h[k] = Array.new end
 # torrent)
 def mark_download game
 	usebt = game.btlink ? true : false
-	if usebt
+	if usebt and $verify
 		# check if it exists
 		begin
 			torrent = open(game.btlink).read
@@ -262,6 +264,9 @@ optparse = OptionParser.new do |opts|
 	opts.banner = "Usage: grab-hib.rb [options]"
 	opts.on("-d", "--download FILENAME", "download library index into FILENAME.html, FILENAME.json") do |download|
 		options[:download] = download
+	end
+	opts.on("-v", "--[no-]verify", "verify torrents before selecting them") do |v|
+		$verify = v
 	end
 	opts.on("-h", "--help", "Display this screen") do
 		puts opts
