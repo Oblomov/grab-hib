@@ -246,7 +246,7 @@ def process_json_data jd
 						dl = true
 					elsif (link = ds['external_link'])
 						# TODO only announce once per external link
-						STDERR.puts "# No automatic downloads for #{savepath}, go to #{link}"
+						STDERR.puts "# No automatic downloads for #{savepath} (#{ds['name']}), go to #{link}"
 						dl = false
 					end
 					if dl
