@@ -115,6 +115,11 @@ def get_root name
 	return root
 end
 
+# Get a filename from a link
+def get_filename link
+	return File.basename(link).sub(/\?((game)?key|ttl)=.*/,'')
+end
+
 # Process an old-style (pre-API) HTML file
 def process_oldstyle_html contents
 	doc = Nokogiri::HTML(contents)
@@ -146,7 +151,7 @@ def process_oldstyle_html contents
 
 				$dirs << savepath
 				if dl
-					fname = File.basename(link).sub(/\?(key|ttl)=.*/,'')
+					fname = get_filename link
 					fkey = fname.intern
 					$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
 				end
@@ -245,7 +250,7 @@ def process_json_data jd
 						dl = false
 					end
 					if dl
-						fname = File.basename(link).sub(/\?(key|ttl)=.*/,'')
+						fname = get_filename link
 						fkey = fname.intern
 						# TODO use sha1
 						$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
