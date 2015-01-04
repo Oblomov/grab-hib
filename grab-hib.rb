@@ -9,6 +9,7 @@
 # (3) wgets the other files
 =end
 
+require 'mechanize'
 require 'nokogiri'
 require 'set'
 require 'pathname'
@@ -164,54 +165,43 @@ end
 SETTINGS = 'settings.yml'
 
 # File where cookies are stored
-COOKIES = 'cookies.json'
-# cookies!
-$cookies = {}
+COOKIES = 'cookies.yaml'
 
-# Store cookies based on the set-cookie headers in a response
-def set_cookies resp
-	resp.get_fields('set-cookie').each do |cookie|
-		set = cookie.split('; ', 2).first.split('=')
-		if set.length == 1
-			$cookies.delete(set.first)
-		else
-			$cookies[set.first]=set.last
-		end
-	end
-end
+$api_agent = Mechanize.new
+$api_agent.user_agent = 'grab-hib'
 
-# Return the cookies in a header-compatible format
-def get_cookies
-	return $cookies.map { |k,v| "#{k}=#{v}"}.join('; ')
+if File.exists? COOKIES
+	$api_agent.cookie_jar.load(COOKIES)
 end
 
 # Download the user home page on Humble Bundle
 def download_home username, password
 	STDERR.puts "Downloading HIB home ..."
-	url = URI.parse('https://www.humblebundle.com/login')
-	http = Net::HTTP.new(url.host, url.port)
-	http.use_ssl = true
-	resp, data = http.get(url.path)
-	set_cookies resp
-	data = "goto=/home&username="+username+"&password="+password+"&authy-token&submit-data="
-	headers = {
-		'Cookie' => get_cookies,
-		'Referer' => url.to_s,
-		'Content-Type' => 'application/x-www-form-urlencoded'
-	}
-	resp, data = http.post(url.path, data, headers)
-	set_cookies resp
-	res = http.get(resp.response['Location'], {'Cookie:' => get_cookies})
-	return res.body
+
+	# if we have cookies, try logging in directly
+	if File.exists? COOKIES
+		result = $api_agent.get('https://www.humblebundle.com/home').body
+		return result if result.match username
+	end
+
+	STDERR.puts "Logging in ..."
+	loginpage = $api_agent.get 'https://www.humblebundle.com/login'
+	loginform = loginpage.forms.first
+	loginform.field_with(:name => 'goto').value = '/home'
+	loginform.field_with(:name => 'username').value = username
+	loginform.field_with(:name => 'password').value = password
+
+	result = $api_agent.submit(loginform).body
+
+	$api_agent.cookie_jar.save_as(COOKIES)
+
+	return result
 end
 
 # Issue an API call
 API_URL = 'https://www.humblebundle.com/api/v1/'
 def api_call path
-	url = URI.parse API_URL+path
-	http = Net::HTTP.new(url.host, url.port)
-	http.use_ssl = true
-	resp = http.get(url.path, {'Cookie:' => get_cookies})
+	resp = $api_agent.get API_URL+path
 	return resp.body
 end
 
@@ -279,9 +269,8 @@ optparse = OptionParser.new do |opts|
 	end
 end
 
-# Load settings and (potentially old)
+# Load settings
 settings = YAML.load_file SETTINGS
-File.open(COOKIES) { |f| $cookies.replace JSON.load f} if File.exists? COOKIES
 
 optparse.parse!
 
@@ -298,7 +287,6 @@ else
 	json = options[:download] + '.json'
 	contents = download_home(settings['username'], settings['password'])
 	File.write html, contents
-	File.write COOKIES, JSON.dump($cookies)
 end
 
 # `contents` holds the file contents of either the file passed on the command line
