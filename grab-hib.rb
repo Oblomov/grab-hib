@@ -167,12 +167,29 @@ SETTINGS = 'settings.yml'
 # File where cookies are stored
 COOKIES = 'cookies.yaml'
 
+# A custom page parser for the login page, which contains the login form
+# 'hidden' inside a script of type text/template
+class LoginPageParser
+	def self.parse(body, url, encoding)
+		doc = Nokogiri::HTML::Document.parse(body, url, encoding)
+		forms = (doc/'form')
+		al = (doc/'#account-login').first
+		if forms.empty? and al
+			form = Nokogiri::HTML(al.text)
+			(doc/'body').first << form.root
+		end
+		return doc
+	end
+end
+
 $api_agent = Mechanize.new
 $api_agent.user_agent = 'grab-hib'
+$api_agent.html_parser = LoginPageParser
 
 if File.exists? COOKIES
 	$api_agent.cookie_jar.load(COOKIES)
 end
+
 
 # Download the user home page on Humble Bundle
 def download_home username, password
@@ -191,9 +208,13 @@ def download_home username, password
 	loginform.field_with(:name => 'username').value = username
 	loginform.field_with(:name => 'password').value = password
 
-	result = $api_agent.submit(loginform).body
+	$api_agent.submit(loginform)
 
 	$api_agent.cookie_jar.save_as(COOKIES)
+
+	# Re-get home, I'm too lazy to work out how to make redirect work
+	# with the new style JS stuff they have now
+	result = $api_agent.get('https://www.humblebundle.com/home').body
 
 	return result
 end
@@ -294,7 +315,7 @@ end
 # an old (pre-API) index file, a new (API) index file, or the JSON file with the list of
 # all products already
 
-gk = contents.match /gamekeys: (\[[^\]]+\])/
+gk = contents.match /gamekeys\s*[=:]\s*(\[[^\]]+\])/
 if gk
 	# API index files have a gamekeys list, use it to build a JSON of the
 	# product data (and store it on disk too, for future uses)
