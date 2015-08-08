@@ -20,6 +20,8 @@ require 'open-uri'
 require 'optparse'
 require 'yaml'
 require 'json'
+require 'date'
+
 require './bdecode'
 
 Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
@@ -294,6 +296,11 @@ end
 settings = YAML.load_file SETTINGS
 
 optparse.parse!
+
+# With no option, default to download to a file name hib-YYYYMMDD
+if options.empty? and ARGV.first.nil?
+	options[:download] = Date.today.strftime("hib-%Y%m%d")
+end
 
 if not options[:download]
 	html = ARGV.first
