@@ -24,7 +24,7 @@ require 'date'
 
 require './bdecode'
 
-Game = Struct.new(:file, :md5, :path, :weblink, :btlink)#, :timestamp)
+Game = Struct.new(:file, :md5, :path, :weblink, :btlink, :bundle)#, :timestamp)
 
 class Game
 	def <=>(other)
@@ -100,21 +100,38 @@ end
 # up to (and excluding) the first underscore
 def get_root name
 	root = name.dup
-	if root.match /^anomaly/
-		root = File.join('anomaly', root[/[^_]*/].sub(/^anomaly/,''))
+	%w{ _[^_]*bundle
+		_prototype _demo _promo _game _core
+		_soundtrack withsoundtrack _audio _score
+		_android_and_pc _android _linux _mac _windows _win _pc
+		_freesong _song _remix
+		_free _text _comic
+		_book _ebook _coloringbook _pdf _makingof _papercraft _artbook
+		_excerpt _dlc _premium _deluxe}.each do |sfx|
+		root.sub!(Regexp.new(sfx), '')
 	end
-	case root
-	when /_makingof/
-		root = root.sub(/_makingof.*/,'').gsub('_','-')
-	when /_bundle$/
-		root = root.sub(/_bundle$/,'').gsub('_','-')
-	when /_prototype$/
-		root = root.sub(/_prototype$/,'').gsub('_','-')
-	when /withsoundtrack$/
-		root = root.sub(/withsoundtrack$/,'').gsub('_','-')
-	else
-		root = root[/[^_]*/]
+	root.sub!(/_(vol\d+)/, '/\1')
+	[
+		[ /^aaaaaa_?/, 'aaaaaa' ],
+		[ /^amnesia_/, 'amnesia' ],
+		[ /^anomaly/, 'anomaly' ],
+		[ /^trine2_?/, 'trine2' ],
+		[ /^trine_enhanced/, 'trine' ],
+		[ /^kingdomrush?/, 'kingdomrush' ], # yes, there's one with a missing h
+		[ /^(the)?blackwell/, 'blackwell' ],
+		[ /^ftlfasterthanlight(_ae)?/, 'ftl' ],
+		[ /^talisman_?/, 'talisman' ],
+		[ /^catan_?/, 'catan' ],
+		[ /^theinnerworld_?/, 'theinnerworld' ],
+		[ /^peteseeger_?/, 'peteseeger' ],
+		[ /^tothemoon_?/, 'tothemoon' ],
+		[ /^preteniousgame_?/, 'pretentiousgame' ],
+	]. each do |pair|
+		rx = pair.first
+		base = pair.last
+		root = File.join(base, root.sub(rx,'')) if rx.match root
 	end
+	root.gsub!('_', '-')
 	return root
 end
 
@@ -266,7 +283,7 @@ def process_json_data jd
 						fname = get_filename link
 						fkey = fname.intern
 						# TODO use sha1
-						$files[fkey] << Game.new(fname, md5, savepath, link, btlink)#, ts)
+						$files[fkey] << Game.new(fname, md5, savepath, link, btlink, [hash['product']['human_name'], gk])#, ts)
 					end
 				end
 			end
@@ -394,7 +411,9 @@ $torrents.keys.each do |dir|
 	base = dir.split('/').first
 	if base != lastbase
 		lastbase = base
-		puts "echo '    #{base}'"
+		puts "echo '    #{base}' # " + $torrents[dir].map { |game|
+			"%s (%s)" % game.bundle
+		}.uniq.join(', ')
 	end
 	fulldir = File.absolute_path(dir)
 	puts "add_torrents '#{fulldir}' \\"
