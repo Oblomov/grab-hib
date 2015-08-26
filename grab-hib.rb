@@ -102,12 +102,12 @@ def get_root name
 	root = name.dup
 	%w{ _[^_]*bundle
 		_prototype _demo _promo _game _core
-		_soundtrack withsoundtrack _audio _score
+		_soundtrack withsoundtrack _only_audio _audio _score
 		_android_and_pc _android _linux _mac _windows _win _pc
 		_freesong _song _remix
 		_free _text _comic
 		_book _ebook _coloringbook _pdf _makingof _papercraft _artbook
-		_excerpt _dlc _premium _deluxe}.each do |sfx|
+		_excerpt _dlc _?premium _deluxe _asm}.each do |sfx|
 		root.sub!(Regexp.new(sfx), '')
 	end
 	root.sub!(/_(vol\d+)/, '/\1')
@@ -115,6 +115,7 @@ def get_root name
 		[ /^aaaaaa_?/, 'aaaaaa' ],
 		[ /^amnesia_/, 'amnesia' ],
 		[ /^anomaly/, 'anomaly' ],
+		[ /^bittrip/, 'bittrip' ],
 		[ /^trine2_?/, 'trine2' ],
 		[ /^trine_enhanced/, 'trine' ],
 		[ /^kingdomrush?/, 'kingdomrush' ], # yes, there's one with a missing h
@@ -122,6 +123,7 @@ def get_root name
 		[ /^ftlfasterthanlight(_ae)?/, 'ftl' ],
 		[ /^talisman_?/, 'talisman' ],
 		[ /^catan_?/, 'catan' ],
+		[ /^shadowgrounds_?/, 'shadowgrounds' ],
 		[ /^theinnerworld_?/, 'theinnerworld' ],
 		[ /^peteseeger_?/, 'peteseeger' ],
 		[ /^tothemoon_?/, 'tothemoon' ],
