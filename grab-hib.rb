@@ -193,11 +193,16 @@ COOKIES = 'cookies.yaml'
 class LoginPageParser
 	def self.parse(body, url, encoding)
 		doc = Nokogiri::HTML::Document.parse(body, url, encoding)
-		forms = (doc/'form')
-		al = (doc/'#account-login').first
-		if forms.empty? and al
-			form = Nokogiri::HTML(al.text)
-			(doc/'body').first << form.root
+		['#account-login', '#account-humble-guard'].each do |id|
+			template = (doc/id).first
+			if template
+				STDERR.puts "Found template #{id}"
+				STDERR.puts "===="
+				STDERR.puts template.text
+				STDERR.puts "===="
+				form = Nokogiri::HTML(template.text)
+				(doc/'body').first << form.root
+			end
 		end
 		return doc
 	end
@@ -211,6 +216,26 @@ if File.exists? COOKIES
 	$api_agent.cookie_jar.load(COOKIES)
 end
 
+# Check if we triggered a browser verification code
+def check_home_guard
+	result = $api_agent.get('https://www.humblebundle.com/home')
+	doc = Nokogiri::HTML(result.body)
+	if (doc/'h1').first.text.downcase == 'verify this browser'
+		STDERR.puts "Verification requested. Insert guard code:"
+		code = STDIN.readline.chomp
+
+		result.form_with(:id => 'account-humble-guard-form') do |guardform|
+			guardform.field_with(:name=>'code').value = code
+			$api_agent.submit(guardform)
+		end
+
+		$api_agent.cookie_jar.save_as(COOKIES)
+
+		result = $api_agent.get('https://www.humblebundle.com/home')
+	end
+	return result.body
+end
+
 
 # Download the user home page on Humble Bundle
 def download_home username, password
@@ -218,7 +243,7 @@ def download_home username, password
 
 	# if we have cookies, try logging in directly
 	if File.exists? COOKIES
-		result = $api_agent.get('https://www.humblebundle.com/home').body
+		result = check_home_guard
 		return result if result.match username
 	end
 
@@ -235,9 +260,7 @@ def download_home username, password
 
 	# Re-get home, I'm too lazy to work out how to make redirect work
 	# with the new style JS stuff they have now
-	result = $api_agent.get('https://www.humblebundle.com/home').body
-
-	return result
+	return check_home_guard
 end
 
 # Issue an API call
@@ -334,6 +357,7 @@ else
 	json = options[:download] + '.json'
 	contents = download_home(settings['username'], settings['password'])
 	File.write html, contents
+	raise 'Failed to login/verify' unless contents.match settings['username']
 end
 
 # `contents` holds the file contents of either the file passed on the command line
