@@ -14,7 +14,7 @@ process_group () {
 	for tor in "$@" ; do
 		# get torrents
 		eval $tor
-		found=$(transmission-remote -l | grep "$out")
+		found=$(transmission-remote -l | grep " $out")
 		if [ -z "$found" ] ; then
 			echo "$out not being downloaded yet. Adding $tor in $path ..."
 			prompt "^C to BREAK, [Enter] to proceed"
