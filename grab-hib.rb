@@ -110,7 +110,7 @@ def get_root name
 		_excerpt _dlc _?premium _deluxe _asm}.each do |sfx|
 		root.sub!(Regexp.new(sfx), '')
 	end
-	root.sub!(/_(vol\d+)/, '/\1')
+	root.sub!(/_((vol|issue)\d+)/, '/\1')
 	[
 		[ /^aaaaaa_?/, 'aaaaaa' ],
 		[ /^amnesia_/, 'amnesia' ],
@@ -128,6 +128,7 @@ def get_root name
 		[ /^peteseeger_?/, 'peteseeger' ],
 		[ /^tothemoon_?/, 'tothemoon' ],
 		[ /^preteniousgame_?/, 'pretentiousgame' ],
+		[ /^la[-_]mulana_?/, 'lamulana' ],
 	]. each do |pair|
 		rx = pair.first
 		base = pair.last
@@ -285,8 +286,15 @@ end
 def process_json_data jd
 	jd.each do |gk, hash|
 		hash['subproducts'].each do |prod|
-			root = get_root prod['machine_name']
+			subroot = get_root prod['machine_name']
 			prod['downloads'].each do |dd|
+				root = subroot.dup
+				# Fix KindomRush classic being put under Origin because it's included by
+				# Origin Premium package
+				if dd['machine_name']
+					newroot = get_root dd['machine_name']
+					root = newroot.dup if newroot == 'kingdomrush/'
+				end
 				type = dd['platform']
 				savepath = File.join(root, type)
 				$dirs << savepath
