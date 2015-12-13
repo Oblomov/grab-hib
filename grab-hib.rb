@@ -217,9 +217,13 @@ if File.exists? COOKIES
 	$api_agent.cookie_jar.load(COOKIES)
 end
 
+HOME_URL = 'https://www.humblebundle.com/home'
+LOGIN_URL = 'https://www.humblebundle.com/login'
+
 # Check if we triggered a browser verification code
 def check_home_guard
-	result = $api_agent.get('https://www.humblebundle.com/home')
+	STDERR.puts "Getting #{HOME_URL} ..."
+	result = $api_agent.get HOME_URL
 	doc = Nokogiri::HTML(result.body)
 	if (doc/'h1').first.text.downcase == 'verify this browser'
 		STDERR.puts "Verification requested. Insert guard code:"
@@ -232,7 +236,7 @@ def check_home_guard
 
 		$api_agent.cookie_jar.save_as(COOKIES)
 
-		result = $api_agent.get('https://www.humblebundle.com/home')
+		result = $api_agent.get HOME_URL
 	end
 	return result.body
 end
@@ -249,7 +253,7 @@ def download_home username, password
 	end
 
 	STDERR.puts "Logging in ..."
-	loginpage = $api_agent.get 'https://www.humblebundle.com/login'
+	loginpage = $api_agent.get LOGIN_URL
 	loginform = loginpage.forms.first
 	loginform.field_with(:name => 'goto').value = '/home'
 	loginform.field_with(:name => 'username').value = username
