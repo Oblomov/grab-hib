@@ -102,7 +102,7 @@ def get_root name
 	root = name.dup
 	%w{ _[^_]*bundle
 		_prototype _demo _promo _game _core
-		_soundtrack withsoundtrack _only_audio _audio _score
+		_soundtrack(_only)? withsoundtrack _only_audio _audio _score
 		_android_and_pc _android _linux _mac _windows _win _pc
 		_freesong _song _remix
 		_free _text _comic
