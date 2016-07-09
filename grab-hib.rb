@@ -21,6 +21,7 @@ require 'optparse'
 require 'yaml'
 require 'json'
 require 'date'
+require 'pp'
 
 require './bdecode'
 
@@ -213,59 +214,77 @@ $api_agent = Mechanize.new
 $api_agent.user_agent = 'grab-hib'
 $api_agent.html_parser = LoginPageParser
 
-if File.exists? COOKIES
+# Show request headers to debug connections
+$api_agent.pre_connect_hooks << lambda do |agent, request|
+	PP.pp request.to_hash, STDERR
+end if $DEBUG
+
+if File.exist? COOKIES
 	$api_agent.cookie_jar.load(COOKIES)
 end
 
-HOME_URL = 'https://www.humblebundle.com/home'
+HOME_URL = 'https://www.humblebundle.com/home/library'
 LOGIN_URL = 'https://www.humblebundle.com/login'
-
-# Check if we triggered a browser verification code
-def check_home_guard
-	STDERR.puts "Getting #{HOME_URL} ..."
-	result = $api_agent.get HOME_URL
-	doc = Nokogiri::HTML(result.body)
-	if (doc/'h1').first.text.downcase == 'verify this browser'
-		STDERR.puts "Verification requested. Insert guard code:"
-		code = STDIN.readline.chomp
-
-		result.form_with(:id => 'account-humble-guard-form') do |guardform|
-			guardform.field_with(:name=>'code').value = code
-			$api_agent.submit(guardform)
-		end
-
-		$api_agent.cookie_jar.save_as(COOKIES)
-
-		result = $api_agent.get HOME_URL
-	end
-	return result.body
-end
-
 
 # Download the user home page on Humble Bundle
 def download_home username, password
 	STDERR.puts "Downloading HIB home ..."
 
-	# if we have cookies, try logging in directly
-	if File.exists? COOKIES
-		result = check_home_guard
-		return result if result.match username
+	# try getting HOME
+	result = $api_agent.get HOME_URL
+	File.write("/tmp/try1.html", result.body) if $DEBUG
+	doc = result.parser
+
+	header = (doc/'h1').first
+
+	STDERR.puts header.inspect if $DEBUG
+
+	if header and header.text.downcase == 'humble account sign in'
+		STDERR.puts "Logging in ..."
+=begin
+		result = $api_agent.get LOGIN_URL
+		File.write("/tmp/try1-login.html", result.body) if $DEBUG
+		loginform = result.forms_with(:action => "https://www.humblebundle.com/processlogin").first
+		loginform.field_with(:name => 'goto').value = '/home'
+		loginform.field_with(:name => 'username').value = username
+		loginform.field_with(:name => 'password').value = password
+
+		sub = $api_agent.submit(loginform, nil, {'Referer' => result.uri})
+		File.write("/tmp/try1-sub.html", sub.body) if $DEBUG
+		result = $api_agent.get(HOME_URL, [], sub.uri)
+=end
+		result = $api_agent.post(LOGIN_URL, {:username => username, :password => password})
+		PP.pp(result.code, STDERR) if $DEBUG
+		PP.pp(result.response, STDERR) if $DEBUG
+
+		result = $api_agent.get HOME_URL
+		File.write("/tmp/try2.html", result.body) if $DEBUG
+		doc = result.parser
+		header = (doc/'h1').first
+
+		STDERR.puts header.inspect if $DEBUG
 	end
 
-	STDERR.puts "Logging in ..."
-	loginpage = $api_agent.get LOGIN_URL
-	loginform = loginpage.forms.first
-	loginform.field_with(:name => 'goto').value = '/home'
-	loginform.field_with(:name => 'username').value = username
-	loginform.field_with(:name => 'password').value = password
+	if header and header.text.downcase == 'verify this browser'
+		STDERR.puts "Verification requested. Insert guard code:"
+		code = STDIN.readline.chomp.upcase
 
-	$api_agent.submit(loginform)
+		loginform = result.forms_with(:action => "https://www.humblebundle.com/user/humbleguard").first
+		loginform.field_with(:name => 'goto').value = '/home'
+		loginform.field_with(:name => 'qs').value = ''
+		loginform.field_with(:name => 'code').value = code
+
+		sub = $api_agent.submit(loginform, nil, {'Referer' => result.uri})
+		File.write("/tmp/try2-sub.html", sub.body) if $DEBUG
+		$api_agent.cookie_jar.save_as(COOKIES)
+
+		result = $api_agent.get(HOME_URL, [], sub.uri)
+		File.write("/tmp/try3.html", result.body) if $DEBUG
+	end
 
 	$api_agent.cookie_jar.save_as(COOKIES)
 
-	# Re-get home, I'm too lazy to work out how to make redirect work
-	# with the new style JS stuff they have now
-	return check_home_guard
+	return result.body
 end
 
 # Issue an API call
@@ -349,6 +368,8 @@ end
 # Load settings
 settings = YAML.load_file SETTINGS
 
+$api_agent.add_auth(API_URL, settings['username'], settings['password'])
+
 optparse.parse!
 
 # With no option, default to download to a file name hib-YYYYMMDD
@@ -377,7 +398,7 @@ end
 # an old (pre-API) index file, a new (API) index file, or the JSON file with the list of
 # all products already
 
-gk = contents.match /gamekeys\s*[=:]\s*(\[[^\]]+\])/
+gk = contents.match(/gamekeys\s*[=:]\s*(\[[^\]]+\])/)
 if gk
 	# API index files have a gamekeys list, use it to build a JSON of the
 	# product data (and store it on disk too, for future uses)
