@@ -15,6 +15,8 @@ Humble Library (see below for further information) and _produces a shell
 script_. This shell script is the one that does the actual downloading
 and related tasks.
 
+## Automatic download
+
 `grab-hib.rb` can download your Humble Library HTML file by itself, or
 you can do the downloading and pass it to the command line. To let
 `grab-hib.rb` do the downloading, you'll have to create a `settings.yml`
@@ -32,6 +34,10 @@ structures, instructions which are redirecting to the file `doit` in
 this example. Running `doit` (e.g. with `sh ./doit`) will start the
 actual downloads.
 
+If automatic login fails, see below.
+
+## Recovery/manual download
+
 Data about your library is stored in a pair of files called
 `whatever.html` (which can be used to re-extract the list of bundles
 bought without contacting the Humble Bundle website again) and
@@ -47,6 +53,19 @@ you bought, or
 	./grab-hib.rb whatever.json > doit
 
 which will just re-extract the data from the already downloaded list.
+
+This approach can be used also if automatically login fails, by grabbing
+the library file from the browser, saving it to disk and then passing it
+as argument to grab-hib: point your browser to either
+https://www.humblebundle.com/home/library or
+https://www.humblebundle.com/api/v1/user/order
+logging in if necessary, save the source of the page (e.g. to
+`manually.txt`) and then process it as usual, e.g. by
+
+	./grab-hib.rb manually.txt > doit
+
+In any of the mentioned cases, you still need to run `doit` as mentioned
+in the previous paragraph will start the actual downloads
 
 # Downloads
 
