@@ -103,10 +103,11 @@ def get_root name
 	root = name.dup
 	%w{ _[^_]*bundle
 		_prototype _demo _promo _game _core
-		_soundtrack(_only)? withsoundtrack _only_audio _audio _score
+		_(no_)?soundtrack(_only)? withsoundtrack _only_audio _audio _score
 		_android_and_pc _android _linux _mac _windows _win _pc
 		_freesong _song _remix
 		_free _text _comic
+		_goty _directorscut _alldlc
 		_book _ebook _coloringbook _pdf _makingof _papercraft _artbook
 		_excerpt _dlc _?premium _deluxe _asm}.each do |sfx|
 		root.sub!(Regexp.new(sfx), '')
@@ -130,6 +131,7 @@ def get_root name
 		[ /^tothemoon_?/, 'tothemoon' ],
 		[ /^preteniousgame_?/, 'pretentiousgame' ],
 		[ /^la[-_]mulana_?/, 'lamulana' ],
+		[ /^oddworld_strangerswrath_?/, 'oddworld/strangerswrath'],
 	]. each do |pair|
 		rx = pair.first
 		base = pair.last
