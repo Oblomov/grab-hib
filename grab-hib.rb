@@ -190,108 +190,61 @@ SETTINGS = 'settings.yml'
 # File where cookies are stored
 COOKIES = 'cookies.yaml'
 
-# A custom page parser for the login page, which contains the login form
-# 'hidden' inside a script of type text/template
-class LoginPageParser
-	def self.parse(body, url, encoding)
-		doc = Nokogiri::HTML::Document.parse(body, url, encoding)
-		['#account-login', '#account-humble-guard'].each do |id|
-			template = (doc/id).first
-			if template
-				STDERR.puts "Found template #{id}"
-				STDERR.puts "===="
-				STDERR.puts template.text
-				STDERR.puts "===="
-				form = Nokogiri::HTML(template.text)
-				(doc/'body').first << form.root
-			end
-		end
-		return doc
-	end
-end
-
 $api_agent = Mechanize.new
-$api_agent.user_agent = 'grab-hib'
-$api_agent.html_parser = LoginPageParser
+$api_agent.user_agent = 'Apache-HttpClient/UNAVAILABLE (java 1.4; really grab-hib - please allow 3rd party API access officially)'
+
+$api_agent.pre_connect_hooks << lambda do |agent, request|
+	request['X-Requested-By'] = 'hb_android_app'
+	request['Accept'] = 'text/json'
+	request['Accept-Charset'] = 'utf-8'
+end
 
 # Show request headers to debug connections
 $api_agent.pre_connect_hooks << lambda do |agent, request|
 	PP.pp request.to_hash, STDERR
 end if $DEBUG
 
+
 if File.exist? COOKIES
 	$api_agent.cookie_jar.load(COOKIES)
 end
 
 HOME_URL = 'https://www.humblebundle.com/home/library'
+CAPTCHA_URL = 'https://www.humblebundle.com/user/captcha'
 LOGIN_URL = 'https://www.humblebundle.com/login'
 
-# Download the user home page on Humble Bundle
-def download_home username, password
-	STDERR.puts "Downloading HIB home ..."
-
-	# try getting HOME
-	result = $api_agent.get HOME_URL
-	File.write("/tmp/try1.html", result.body) if $DEBUG
-	doc = result.parser
-
-	header = (doc/'h1').first
-
-	STDERR.puts header.inspect if $DEBUG
-
-	if header and header.text.downcase == 'humble account sign in'
-		STDERR.puts "Logging in ..."
-=begin
-		result = $api_agent.get LOGIN_URL
-		File.write("/tmp/try1-login.html", result.body) if $DEBUG
-		loginform = result.forms_with(:action => "https://www.humblebundle.com/processlogin").first
-		loginform.field_with(:name => 'goto').value = '/home'
-		loginform.field_with(:name => 'username').value = username
-		loginform.field_with(:name => 'password').value = password
-
-		sub = $api_agent.submit(loginform, nil, {'Referer' => result.uri})
-		File.write("/tmp/try1-sub.html", sub.body) if $DEBUG
-		result = $api_agent.get(HOME_URL, [], sub.uri)
-=end
-		result = $api_agent.post(LOGIN_URL, {:username => username, :password => password})
+def hib_login username, password
+	begin
+		result = $api_agent.post(LOGIN_URL, JSON.dump({:username => username, :password => password}))
+	rescue Mechanize::UnauthorizedError => e
+		result = e.page
 		PP.pp(result.code, STDERR) if $DEBUG
 		PP.pp(result.response, STDERR) if $DEBUG
-
-		result = $api_agent.get HOME_URL
-		File.write("/tmp/try2.html", result.body) if $DEBUG
-		doc = result.parser
-		header = (doc/'h1').first
-
-		STDERR.puts header.inspect if $DEBUG
+		PP.pp(result.body, STDERR) if $DEBUG
+		PP.pp(JSON.parse(result.body), STDERR) if $DEBUG
+		if JSON.parse(result.body)['captcha_required']
+			raise NotImplementedError, "captcha required"
+		else
+			raise e
+		end
 	end
-
-	if header and header.text.downcase == 'verify this browser'
-		STDERR.puts "Verification requested. Insert guard code:"
-		code = STDIN.readline.chomp.upcase
-
-		loginform = result.forms_with(:action => "https://www.humblebundle.com/user/humbleguard").first
-		loginform.field_with(:name => 'goto').value = '/home'
-		loginform.field_with(:name => 'qs').value = ''
-		loginform.field_with(:name => 'code').value = code
-
-		sub = $api_agent.submit(loginform, nil, {'Referer' => result.uri})
-		File.write("/tmp/try2-sub.html", sub.body) if $DEBUG
-		$api_agent.cookie_jar.save_as(COOKIES)
-
-		result = $api_agent.get(HOME_URL, [], sub.uri)
-		File.write("/tmp/try3.html", result.body) if $DEBUG
-	end
-
-	$api_agent.cookie_jar.save_as(COOKIES)
-
-	return result.body
+	PP.pp(result.code, STDERR) if $DEBUG
+	PP.pp(result.response, STDERR) if $DEBUG
+	$api_agent.cookie_jar.save_as(COOKIES) if result.code.to_i == 200
+	return result
 end
 
 # Issue an API call
 API_URL = 'https://www.humblebundle.com/api/v1/'
 def api_call path
 	resp = $api_agent.get API_URL+path
+	PP.pp(resp.code, STDERR) if $DEBUG
+	PP.pp(resp.response, STDERR) if $DEBUG
 	return resp.body
+end
+
+def get_orders
+	return api_call 'user/order'
 end
 
 # Download the JSON data for the given game keys
@@ -385,12 +338,17 @@ if not options[:download]
 	end
 	json = html.sub(/(.html?)?$/,'.json')
 	contents = File.read html
+	login = hib_login settings['username'], settings['password']
+	raise "Failed to login/verify" if login.code.to_i != 200
 else
 	html = options[:download] + '.html'
 	json = options[:download] + '.json'
-	contents = download_home(settings['username'], settings['password'])
-	File.write html, contents
-	raise 'Failed to login/verify' unless contents.match settings['username']
+	login = hib_login settings['username'], settings['password']
+	raise 'Failed to login/verify' if login.code.to_i != 200
+	contents = get_orders
+	File.write json, contents
+	STDERR.puts contents.lines[0..3] if $DEBUG
+	raise
 end
 
 # `contents` holds the file contents of either the file passed on the command line
@@ -404,6 +362,10 @@ if gk
 	# product data (and store it on disk too, for future uses)
 	gks = JSON.parse gk[1]
 	STDERR.puts "API-based index file, game keys #{gks.join(', ')}"
+	json_data = process_gamekeys gks, json
+elsif contents[0,1] == '['
+	STDERR.puts "JSON user order data"
+	gks = JSON.parse(contents).each { |v| v['gamekey']}
 	json_data = process_gamekeys gks, json
 elsif contents[0,1] == '{'
 	STDERR.puts "JSON product data"
