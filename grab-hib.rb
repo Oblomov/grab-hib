@@ -346,7 +346,6 @@ else
 	contents = get_orders
 	File.write json, contents
 	STDERR.puts contents.lines[0..3] if $DEBUG
-	raise
 end
 
 # `contents` holds the file contents of either the file passed on the command line
@@ -363,7 +362,7 @@ if gk
 	json_data = process_gamekeys gks, json
 elsif contents[0,1] == '['
 	STDERR.puts "JSON user order data"
-	gks = JSON.parse(contents).each { |v| v['gamekey']}
+	gks = JSON.parse(contents).map { |v| v['gamekey']}
 	json_data = process_gamekeys gks, json
 elsif contents[0,1] == '{'
 	STDERR.puts "JSON product data"
