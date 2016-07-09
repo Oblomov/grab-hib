@@ -338,8 +338,6 @@ if not options[:download]
 	end
 	json = html.sub(/(.html?)?$/,'.json')
 	contents = File.read html
-	login = hib_login settings['username'], settings['password']
-	raise "Failed to login/verify" if login.code.to_i != 200
 else
 	html = options[:download] + '.html'
 	json = options[:download] + '.json'
