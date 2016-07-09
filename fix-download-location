@@ -18,9 +18,9 @@ process_group () {
 		if [ -z "$found" ] ; then
 			echo "$out not being downloaded yet. Adding $tor in $path ..."
 			prompt "^C to BREAK, [Enter] to proceed"
-			transmission-remote -w "$path"
-			transmission-remote -a $tor
-			echo "\tdone."
+			transmission-remote -w "$path" &&
+			transmission-remote -a $tor &&
+			echo "\tdone." || echo "\tproblems!" && echo $tor >&2
 			continue
 		fi
 		tornum="$(echo $found | cut -f1 -d\ )"
@@ -43,7 +43,7 @@ process_group () {
 		echo "\tshould be $path,"
 		echo "\tmoving ..."
 		prompt "^C to BREAK, [Enter] to proceed"
-		transmission-remote -t $tornum --start
+		transmission-remote -t $tornum --start &&
 		transmission-remote -t $tornum --move $path
 		echo "\tdone."
 		prompt "[Enter] to continue"
